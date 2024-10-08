@@ -98,5 +98,10 @@ app.post('/login', async (req, res) => {
     }
 });
 
+//Profile route
+app.post('/profile', async (req, res) => {
+    const {fullName, address1, address2, city, state, zip, skills, preferences, availability} = req.body;
+});
+
 const PORT = 4000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
