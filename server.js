@@ -35,11 +35,13 @@ app.get('/', async (req, res) => {
 const loginRoutes = require('./routes/loginRoutes'); 
 const registrationRoutes = require('./routes/registrationRoutes'); 
 const profileRoutes = require('./routes/profileRoutes'); 
+const eventRoutes = require('./routes/eventRoutes'); 
 
 // Routes for login, signup, and profile
 app.use('/login', loginRoutes);
 app.use('/signup', registrationRoutes);
 app.use('/profile', profileRoutes);
+app.use('/events', eventRoutes);
 
 // Start the server
 const PORT = 4000;
