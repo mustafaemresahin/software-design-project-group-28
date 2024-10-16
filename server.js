@@ -9,29 +9,38 @@ const axios = require('axios');
 
 const app = express();
 
+// Middleware to parse JSON
 app.use(express.json());
-app.use(cors());
 
+// Enable CORS for all routes, you can set 'origin' to your frontend's URL
+app.use(cors({
+    origin: 'http://localhost:3000', // Or the actual frontend domain
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true
+}));
+
+// Connect to MongoDB
 const connectionString = process.env.CONNECTION_STRING;
 mongoose.connect(connectionString)
     .then(() => console.log("Connected to MongoDB"))
     .catch((err) => console.error("Error connecting to MongoDB:", err));
 
+// Test route
 app.get('/', async (req, res) => {
-    console.log("request");
+    console.log("Received request to root");
     res.json('Hello from Express');
 });
 
-//Profile route
-app.post('/profile', async (req, res) => {
-    const {fullName, address1, address2, city, state, zip, skills, preferences, availability} = req.body;
-});
+// Profile route (now handled in profileRoutes.js)
+const loginRoutes = require('./routes/loginRoutes'); 
+const registrationRoutes = require('./routes/registrationRoutes'); 
+const profileRoutes = require('./routes/profileRoutes'); 
 
-const loginRoutes = require('./routes/loginRoutes'); // Adjust the path as needed
-const registrationRoutes = require('./routes/registrationRoutes'); // Import Master PO routes
-
+// Routes for login, signup, and profile
 app.use('/login', loginRoutes);
 app.use('/signup', registrationRoutes);
+app.use('/profile', profileRoutes);
 
+// Start the server
 const PORT = 4000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
