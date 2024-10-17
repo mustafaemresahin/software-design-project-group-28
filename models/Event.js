@@ -7,6 +7,8 @@ const eventSchema = new mongoose.Schema({
   requiredSkills: [{ type: String, required: true }],
   urgency: { type: String, required: true },
   eventDate: { type: Date, required: true }
+} , {
+  timestamps: true
 });
 
 const Event = mongoose.model('Event', eventSchema);
