@@ -36,12 +36,15 @@ const loginRoutes = require('./routes/loginRoutes');
 const registrationRoutes = require('./routes/registrationRoutes'); 
 const profileRoutes = require('./routes/profileRoutes'); 
 const eventRoutes = require('./routes/eventRoutes'); 
+const notifsRoutes = require('./routes/notifsRoutes');
+const matchingRoutes = require('./routes/matchingRoutes'); 
 
-// Routes for login, signup, and profile
 app.use('/login', loginRoutes);
 app.use('/signup', registrationRoutes);
 app.use('/profile', profileRoutes);
 app.use('/events', eventRoutes);
+app.use('/notifs', notifsRoutes);
+app.use('/matching', matchingRoutes);
 
 // Start the server
 const PORT = 4000;
