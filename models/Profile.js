@@ -14,7 +14,18 @@ const profileSchema = new Schema({
         'WA', 'WV', 'WI', 'WY'
     ], required: false }, // Optional enum for US states
     zip: { type: String, maxlength: 9 }, // Optional
-    skills: [{ type: String, enum: ['Programming', 'Design', 'Marketing', 'Writing', 'Project Management'] }], // Optional array of skills
+    skills: [{ type: String, enum: [
+        "Food Preparation & Serving",
+        "Cleaning & Sanitation",
+        "First Aid & CPR",
+        "Event Planning & Coordination",
+        "Counseling & Emotional Support",
+        "Child Care",
+        "Administrative & Clerical Work",
+        "Language Translation & Interpretation",
+        "Transportation & Driving",
+        "Handyman Skills (Basic Repairs & Maintenance)"
+    ] }],
     preferences: { type: String }, // Optional for user preferences
     availability: [{ type: Date }], // Optional array of dates for availability
 }, {
