@@ -7,7 +7,8 @@ const notifsSchema = new Schema({
   eventName: { type: String },
   eventDescription: { type: String }, // Add description
   location: { type: String },         // Add location
-  eventDate: { type: Date }           // Add date
+  eventDate: { type: Date },         // Add date
+  user: { type: Schema.Types.ObjectId, ref: 'User', required: false}
 });
 
 const Notifs = mongoose.model('Notifs', notifsSchema);
