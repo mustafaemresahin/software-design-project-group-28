@@ -7,7 +7,7 @@ const moment = require('moment');
 
 // Route to create a notification for a given event
 router.post('/create', async (req, res) => {
-  const { eventId, notifType } = req.body;  // Get event ID and user info from request body
+  const { eventId, notifType, userId } = req.body;  // Now also capturing userId
   try {
     // Find the event based on eventId
     const event = await Event.findById(eventId);
@@ -22,6 +22,7 @@ router.post('/create', async (req, res) => {
       eventDescription: event.eventDescription,
       location: event.location,
       eventDate: event.eventDate,
+      user: userId // Now we assign the notification to a specific user
     };
 
     switch (notifType) {
@@ -47,7 +48,6 @@ router.post('/create', async (req, res) => {
   }
 });
 
-//creates notification for upcoming events
 // Scheduled task to check for events happening within a day every 5 minutes
 cron.schedule('*/5 * * * *', async () => { // This runs every 5 minutes
     try {
@@ -64,11 +64,9 @@ cron.schedule('*/5 * * * *', async () => { // This runs every 5 minutes
 
         // Process each event and check if a notification with the title 'Upcoming Event Alert!' exists before creating one
         const notifications = await Promise.all(upcomingEvents.map(async (event) => {
-            // Check if a notification with the specific title 'Upcoming Event Alert!' already exists for this event
             const existingNotification = await Notifs.findOne({ event: event._id, title: 'Upcoming Event Alert!' });
 
             if (!existingNotification) {
-                // If no such notification exists, create a new one
                 const notification = {
                     title: 'Upcoming Event Alert!',
                     event: event._id,
@@ -80,22 +78,19 @@ cron.schedule('*/5 * * * *', async () => { // This runs every 5 minutes
 
                 return await Notifs.create(notification);
             } else {
-                // If the notification with the title exists, return null
                 console.log(`'Upcoming Event Alert!' notification already exists for event: ${event.eventName}`);
                 return null;
             }
         }));
 
-        // Filter out null values (for events where a notification already existed)
         const createdNotifications = notifications.filter(notification => notification !== null);
-
         console.log(`Notifications created successfully for upcoming events: ${createdNotifications.length}`);
     } catch (error) {
         console.error('Error creating notifications for upcoming events:', error.message);
     }
 });
 
-//creates notification for deleted events
+// Route to create a notification for event cancellation
 router.post('/delete', async (req, res) => {
     const { eventDetails } = req.body;
     try {
@@ -106,7 +101,6 @@ router.post('/delete', async (req, res) => {
             location: req.body.eventLocation,
             eventDate: req.body.eventDate
         };
-        // Save the notification to the database
         const savedNotification = await Notifs.create(notification);
         res.status(201).json({ message: 'Notification created successfully.', savedNotification });
     } catch (error) {
@@ -115,52 +109,56 @@ router.post('/delete', async (req, res) => {
     }
 });
 
-/*
-//creates notification for matched events
+// Route to create a notification when a user is matched to an event (for multiple users)
 router.post('/matched', async (req, res) => {
-    const { eventId, userId } = req.body;  // Get event ID and single user ID from request body
+    const { eventId, userIds } = req.body;  // Get event ID and an array of user IDs from request body
 
     try {
         const event = await Event.findById(eventId);
 
-        // Check if the event exists
         if (!event) {
             return res.status(404).json({ message: 'Event not found.' });
         }
 
-        // Create a notification for the user
-        const notification = {
-            user: userId,  // Associate the notification with the user ID
-            event: event._id,
-            eventName: event.eventName,
-            eventDescription: event.eventDescription,
-            location: event.location,
-            eventDate: event.eventDate,
-        };
+        // Iterate over each user ID and create a notification for each
+        const notifications = await Promise.all(userIds.map(async (userId) => {
+            const notification = {
+                user: userId,  // Associate the notification with the user ID
+                event: event._id,
+                eventName: event.eventName,
+                eventDescription: event.eventDescription,
+                location: event.location,
+                eventDate: event.eventDate,
+                title: 'You Have Been Matched To An Event!'
+            };
 
-        // Save the notification for the user
-        const savedNotification = await Notifs.create(notification);
+            return await Notifs.create(notification);
+        }));
 
-        res.status(201).json({ message: 'Notification created successfully.', savedNotification });
+        res.status(201).json({ message: 'Notifications created successfully for matched users.', notifications });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'An error occurred while creating the notification.', error: error.message });
+        console.error('Error creating notifications for matched users:', error);
+        res.status(500).json({ message: 'An error occurred while creating the notifications.', error: error.message });
     }
 });
-*/
-
 
 // API endpoint to get notifications to show on frontend
 router.get('/all', async (req, res) => {
     try {
-        const notifications = await Notifs.find().sort({ createdAt: -1 }); // Get notifications sorted by creation date
+        const { userId } = req.query;
+        let notifications = [];
+        
+        if (userId) {
+            notifications = await Notifs.find({ user: userId }).sort({ createdAt: -1 }); // Filter by user ID
+        } else {
+            notifications = await Notifs.find().sort({ createdAt: -1 }); // Get all notifications if no userId is provided
+        }
+        
         res.json(notifications);
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'An error occurred while fetching notifications.', error: error.message });
     }
 });
-
-
 
 module.exports = router;
