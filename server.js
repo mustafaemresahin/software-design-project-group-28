@@ -38,6 +38,7 @@ const profileRoutes = require('./routes/profileRoutes');
 const eventRoutes = require('./routes/eventRoutes'); 
 const notifsRoutes = require('./routes/notifsRoutes');
 const matchingRoutes = require('./routes/matchingRoutes'); 
+const historyRoutes = require('./routes/historyRoutes'); 
 
 app.use('/login', loginRoutes);
 app.use('/signup', registrationRoutes);
@@ -45,7 +46,7 @@ app.use('/profile', profileRoutes);
 app.use('/events', eventRoutes);
 app.use('/notifs', notifsRoutes);
 app.use('/matching', matchingRoutes);
-
+app.use('/api/history', historyRoutes);
 // Start the server
 const PORT = 4000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
