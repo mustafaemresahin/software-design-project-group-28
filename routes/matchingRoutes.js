@@ -26,6 +26,10 @@ router.post('/assign', async (req, res) => {
     const event = await Event.findById(eventId);
     const user = await User.findById(userId);
 
+    if (!event || !user) {
+      return res.status(404).json({ message: 'Event or user not found.' });
+    }
+
     // Create a new notification for the user about the event match
     const newNotification = new Notifs({
       title: 'You Have Been Matched To An Event!',
