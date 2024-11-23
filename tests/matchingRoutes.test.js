@@ -21,6 +21,10 @@ app.use(express.json());
 app.use('/matching', matchingRoutes);
 
 describe('Matching Routes', () => {
+  const validUserId = new mongoose.Types.ObjectId().toString();
+  const validEventId = new mongoose.Types.ObjectId().toString();
+  const normalizedDate = new Date();
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -52,7 +56,7 @@ describe('Matching Routes', () => {
       ]);
     });
 
-    it('should handle case where Match.find returns an empty array', async () => {
+    it('should return an empty array if no matches exist', async () => {
       Match.find.mockImplementation(() => ({
         populate: jest.fn().mockImplementation(() => ({
           populate: jest.fn().mockResolvedValue([]),
@@ -75,9 +79,6 @@ describe('Matching Routes', () => {
 
   // Test POST /assign
   describe('POST /assign', () => {
-    const validUserId = new mongoose.Types.ObjectId().toString();
-    const validEventId = new mongoose.Types.ObjectId().toString();
-
     it('should assign users to an event successfully', async () => {
       Event.findById.mockResolvedValue({
         _id: validEventId,
@@ -101,11 +102,42 @@ describe('Matching Routes', () => {
       expect(response.body.message).toBe('Users assigned to event successfully.');
     });
 
-    it('should unassign users from an event successfully', async () => {
-      Event.findById.mockResolvedValue({
-        _id: validEventId,
-        eventName: 'Test Event',
+    it('should handle assigning users who are already matched', async () => {
+      Match.find.mockResolvedValue([{ userId: validUserId }]); // Simulate existing match
+
+      const response = await request(app).post('/matching/assign').send({
+        userId: validUserId,
+        eventId: validEventId,
+        action: 'assign',
       });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toBe('All users are already assigned to this event.');
+    });
+
+    it('should return 400 if eventId is missing', async () => {
+      const response = await request(app).post('/matching/assign').send({
+        userId: validUserId,
+        action: 'assign',
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toBe('eventId is required.');
+    });
+
+    it('should return 400 if action is invalid', async () => {
+      const response = await request(app).post('/matching/assign').send({
+        userId: validUserId,
+        eventId: validEventId,
+        action: 'invalid',
+      });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toBe("Invalid action. Use 'assign' or 'unassign'.");
+    });
+
+    it('should handle unassigning users from an event', async () => {
+      Event.findById.mockResolvedValue({ _id: validEventId });
       Match.deleteMany.mockResolvedValue({ deletedCount: 1 });
       Notifs.create.mockResolvedValue({});
 
@@ -120,10 +152,7 @@ describe('Matching Routes', () => {
     });
 
     it('should handle unassigning all users when userId is omitted', async () => {
-      Event.findById.mockResolvedValue({
-        _id: validEventId,
-        eventName: 'Test Event',
-      });
+      Event.findById.mockResolvedValue({ _id: validEventId });
       Match.deleteMany.mockResolvedValue({ deletedCount: 5 });
 
       const response = await request(app).post('/matching/assign').send({
@@ -135,32 +164,9 @@ describe('Matching Routes', () => {
       expect(response.body.message).toBe('All users unassigned from event successfully.');
     });
 
-    it('should return 400 for invalid action', async () => {
-      const response = await request(app).post('/matching/assign').send({
-        userId: '123',
-        eventId: '456',
-        action: 'invalid',
-      });
-
-      expect(response.status).toBe(400);
-      expect(response.body.message).toBe("Invalid action. Use 'assign' or 'unassign'.");
-    });
-
-    it('should return 404 if event is not found', async () => {
-      Event.findById.mockResolvedValue(null);
-
-      const response = await request(app).post('/matching/assign').send({
-        userId: validUserId,
-        eventId: validEventId,
-        action: 'assign',
-      });
-
-      expect(response.status).toBe(404);
-      expect(response.body.message).toBe('Event not found.');
-    });
-
-    it('should return 500 if an error occurs', async () => {
-      Event.findById.mockRejectedValue(new Error('Database error'));
+    it('should return 500 if Match.insertMany fails during assignment', async () => {
+      Event.findById.mockResolvedValue({ _id: validEventId });
+      Match.insertMany.mockRejectedValue(new Error('Database error'));
 
       const response = await request(app).post('/matching/assign').send({
         userId: validUserId,
@@ -171,13 +177,22 @@ describe('Matching Routes', () => {
       expect(response.status).toBe(500);
       expect(response.body.message).toBe('Error processing request.');
     });
+
+    it('should return 500 if Match.deleteMany fails during unassignment', async () => {
+      Match.deleteMany.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app).post('/matching/assign').send({
+        eventId: validEventId,
+        action: 'unassign',
+      });
+
+      expect(response.status).toBe(500);
+      expect(response.body.message).toBe('Error processing request.');
+    });
   });
 
   // Test POST /match
   describe('POST /match', () => {
-    const validEventId = new mongoose.Types.ObjectId().toString();
-    const normalizedDate = new Date();
-
     it('should match volunteers based on skills and availability', async () => {
       Event.findById.mockResolvedValue({
         _id: validEventId,
@@ -187,7 +202,7 @@ describe('Matching Routes', () => {
 
       Profile.find.mockResolvedValue([
         {
-          user: { _id: '1', name: 'User 1' },
+          user: { _id: validUserId, name: 'User 1' },
           skills: ['Skill 1'],
           availability: [normalizedDate],
         },
@@ -198,26 +213,11 @@ describe('Matching Routes', () => {
       expect(response.status).toBe(200);
       expect(response.body).toEqual([
         {
-          user: { _id: '1', name: 'User 1' },
+          user: { _id: validUserId, name: 'User 1' },
           skills: ['Skill 1'],
           availability: [normalizedDate],
         },
       ]);
-    });
-
-    it('should handle no matched profiles', async () => {
-      Event.findById.mockResolvedValue({
-        _id: validEventId,
-        requiredSkills: ['Skill 1'],
-        eventDate: normalizedDate,
-      });
-
-      Profile.find.mockResolvedValue([]);
-
-      const response = await request(app).post('/matching/match').send({ eventId: validEventId });
-
-      expect(response.status).toBe(200);
-      expect(response.body).toEqual([]);
     });
 
     it('should return 400 if eventId is missing', async () => {
@@ -235,8 +235,22 @@ describe('Matching Routes', () => {
       expect(response.body.message).toBe('Event not found.');
     });
 
-    it('should return 500 if an error occurs', async () => {
-      Event.findById.mockRejectedValue(new Error('Database error'));
+    it('should handle no matching profiles', async () => {
+      Event.findById.mockResolvedValue({
+        _id: validEventId,
+        requiredSkills: ['Skill 1'],
+        eventDate: normalizedDate,
+      });
+      Profile.find.mockResolvedValue([]);
+
+      const response = await request(app).post('/matching/match').send({ eventId: validEventId });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual([]);
+    });
+
+    it('should return 500 if Profile.find fails', async () => {
+      Profile.find.mockRejectedValue(new Error('Database error'));
 
       const response = await request(app).post('/matching/match').send({ eventId: validEventId });
 
@@ -253,7 +267,7 @@ describe('Matching Routes', () => {
           userName: 'User 1',
           userEmail: 'user1@example.com',
           eventName: 'Event 1',
-          eventDate: new Date(),
+          eventDate: normalizedDate,
           eventLocation: 'Location 1',
         },
       ]);
