@@ -6,7 +6,7 @@ const jwt = require('jsonwebtoken');
 
 jest.mock('../models/Match');
 jest.mock('jsonwebtoken', () => ({
-  verify: jest.fn().mockReturnValue({ id: 'user123' }),
+  verify: jest.fn(),
 }));
 
 const app = express();
@@ -16,11 +16,18 @@ app.use('/history', historyRoutes);
 describe('History Routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jwt.verify.mockReturnValue({ id: 'user123' }); // Mock a valid token
   });
 
   describe('GET /history', () => {
-    it('should return 401 if the authorization header is missing', async () => {
+    it('should return 400 if userId is missing in the query', async () => {
       const res = await request(app).get('/history');
+      expect(res.statusCode).toBe(400);
+      expect(res.body).toEqual({ message: 'User ID is required' });
+    });
+
+    it('should return 401 if the authorization token is missing', async () => {
+      const res = await request(app).get('/history?userId=user123');
       expect(res.statusCode).toBe(401);
       expect(res.body).toEqual({ message: 'Unauthorized, token missing' });
     });
@@ -31,7 +38,7 @@ describe('History Routes', () => {
       });
 
       const res = await request(app)
-        .get('/history')
+        .get('/history?userId=user123')
         .set('Authorization', 'Bearer invalidToken');
 
       expect(res.statusCode).toBe(401);
@@ -41,11 +48,11 @@ describe('History Routes', () => {
     it('should return an empty array if no matches are found for the user', async () => {
       Match.find.mockReturnValue({
         populate: jest.fn().mockReturnThis(),
-        exec: jest.fn().mockResolvedValue([]), // Simulates no matches found
+        exec: jest.fn().mockResolvedValue([]), // No matches found
       });
 
       const res = await request(app)
-        .get('/history')
+        .get('/history?userId=user123')
         .set('Authorization', 'Bearer validToken');
 
       expect(res.statusCode).toBe(200);
@@ -65,6 +72,7 @@ describe('History Routes', () => {
             urgency: 'High',
             eventDate: new Date('2024-10-20'),
           },
+          participationStatus: 'Completed',
           matchedOn: new Date('2024-09-01'),
         },
       ];
@@ -74,7 +82,7 @@ describe('History Routes', () => {
       });
 
       const res = await request(app)
-        .get('/history')
+        .get('/history?userId=user123')
         .set('Authorization', 'Bearer validToken');
 
       expect(res.statusCode).toBe(200);
@@ -86,7 +94,7 @@ describe('History Routes', () => {
           requiredSkills: ['Skill1', 'Skill2'],
           urgency: 'High',
           eventDate: new Date('2024-10-20').toISOString(),
-          participationStatus: 'Matched',
+          participationStatus: 'Completed',
           matchedOn: new Date('2024-09-01').toISOString(),
         },
       ]);
@@ -105,6 +113,7 @@ describe('History Routes', () => {
             urgency: null,
             eventDate: null,
           },
+          participationStatus: 'Pending',
           matchedOn: new Date('2024-10-01'),
         },
       ];
@@ -114,7 +123,7 @@ describe('History Routes', () => {
       });
 
       const res = await request(app)
-        .get('/history')
+        .get('/history?userId=user123')
         .set('Authorization', 'Bearer validToken');
 
       expect(res.statusCode).toBe(200);
@@ -125,8 +134,8 @@ describe('History Routes', () => {
           location: 'Not specified',
           requiredSkills: [],
           urgency: 'Low',
-          eventDate: expect.any(String), // Default date
-          participationStatus: 'Matched',
+          eventDate: expect.any(String), // Default to current date
+          participationStatus: 'Pending',
           matchedOn: new Date('2024-10-01').toISOString(),
         },
       ]);
@@ -139,11 +148,11 @@ describe('History Routes', () => {
       });
 
       const res = await request(app)
-        .get('/history')
+        .get('/history?userId=user123')
         .set('Authorization', 'Bearer validToken');
 
       expect(res.statusCode).toBe(500);
-      expect(res.body).toEqual({ message: 'Server error' });
+      expect(res.body).toEqual({ message: 'Server error', error: 'Database error' });
     });
   });
 });

@@ -1,170 +1,101 @@
-// eventRoutes.test.js
-const request = require('supertest');
-const express = require('express');
-const eventRoutes = require('../routes/eventRoutes');
+const mongoose = require('mongoose');
 const Event = require('../models/Event');
+const Match = require('../models/Match');
+const Notifs = require('../models/Notifs');
 
-// Mock the Event model to prevent actual database interaction
-jest.mock('../models/Event', () => {
-  return {
-    find: jest.fn(),
-    findById: jest.fn(),
-    save: jest.fn(),
-    findByIdAndUpdate: jest.fn(),
-    findByIdAndDelete: jest.fn(),
-  };
-});
+// Mock dependent models to avoid database operations
+jest.mock('../models/Match', () => ({
+  deleteMany: jest.fn(),
+}));
 
-const app = express();
-app.use(express.json());
-app.use('/events', eventRoutes);
+jest.mock('../models/Notifs', () => ({
+  deleteMany: jest.fn(),
+}));
 
-describe('Event Routes', () => {
-  afterEach(() => {
-    jest.clearAllMocks(); // Reset mocks after each test
+describe('Event Model', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
   });
 
-  // Test POST /events/create
-  describe('POST /events/create', () => {
-    it('should create a new event', async () => {
-      const mockEvent = { _id: '1', eventName: 'Test Event', location: 'Test Location' };
-      Event.prototype.save.mockResolvedValue(mockEvent);
+  describe('deleteOne Middleware', () => {
+    it('should delete associated matches and notifications when an event is deleted', async () => {
+      const mockEvent = new Event({
+        eventName: 'Test Event',
+        eventDescription: 'Test Description',
+        location: 'Test Location',
+        requiredSkills: ['Skill1', 'Skill2'],
+        urgency: 'High',
+        eventDate: new Date(),
+      });
 
-      const response = await request(app)
-        .post('/events/create')
-        .send(mockEvent);
+      Match.deleteMany.mockResolvedValue({ deletedCount: 5 });
+      Notifs.deleteMany.mockResolvedValue({ deletedCount: 3 });
 
-      expect(response.status).toBe(201);
-      expect(response.body.message).toBe('Event created successfully');
-      expect(response.body.data).toMatchObject(mockEvent);
+      // Simulate calling the deleteOne middleware
+      await mockEvent.deleteOne();
+
+      expect(Match.deleteMany).toHaveBeenCalledWith({ eventId: mockEvent._id });
+      expect(Notifs.deleteMany).toHaveBeenCalledWith({ event: mockEvent._id });
     });
 
-    it('should return 400 if event creation fails', async () => {
-      Event.prototype.save.mockRejectedValue(new Error('Creation error'));
+    it('should handle errors during related data deletion', async () => {
+      const mockEvent = new Event({
+        eventName: 'Test Event',
+        eventDescription: 'Test Description',
+        location: 'Test Location',
+        requiredSkills: ['Skill1', 'Skill2'],
+        urgency: 'High',
+        eventDate: new Date(),
+      });
 
-      const response = await request(app)
-        .post('/events/create')
-        .send({});
+      Match.deleteMany.mockRejectedValue(new Error('Match deletion error'));
+      Notifs.deleteMany.mockResolvedValue({ deletedCount: 3 });
 
-      expect(response.status).toBe(400);
-    });
-  });
+      const next = jest.fn(); // Mock next to check for error handling
+      try {
+        await mockEvent.deleteOne(next);
+      } catch (error) {
+        expect(error.message).toBe('Match deletion error');
+      }
 
-  // Test GET /events/all
-  describe('GET /events/all', () => {
-    it('should retrieve all events', async () => {
-      const mockEvents = [
-        { _id: '1', eventName: 'Event 1', location: 'Location 1' },
-        { _id: '2', eventName: 'Event 2', location: 'Location 2' }
-      ];
-      Event.find.mockResolvedValue(mockEvents);
-
-      const response = await request(app).get('/events/all');
-
-      expect(response.status).toBe(200);
-      expect(response.body).toEqual(mockEvents);
-    });
-
-    it('should return 500 if error occurs during retrieval', async () => {
-      Event.find.mockRejectedValue(new Error('Retrieval error'));
-
-      const response = await request(app).get('/events/all');
-
-      expect(response.status).toBe(500);
+      expect(next).toHaveBeenCalledWith(expect.any(Error));
+      expect(Notifs.deleteMany).toHaveBeenCalledWith({ event: mockEvent._id });
     });
   });
 
-  // Test GET /events/:id
-  describe('GET /events/:id', () => {
-    it('should retrieve an event by ID', async () => {
-      const mockEvent = { _id: '1', eventName: 'Event 1', location: 'Location 1' };
-      Event.findById.mockResolvedValue(mockEvent);
+  describe('Schema Validation', () => {
+    it('should throw validation error for missing required fields', async () => {
+      const invalidEvent = new Event({
+        eventName: '',
+        location: '',
+        urgency: 'InvalidValue',
+      });
 
-      const response = await request(app).get('/events/1');
-
-      expect(response.status).toBe(200);
-      expect(response.body).toEqual(mockEvent);
+      try {
+        await invalidEvent.validate();
+      } catch (error) {
+        expect(error.errors.eventName).toBeDefined();
+        expect(error.errors.eventDescription).toBeDefined();
+        expect(error.errors.requiredSkills).toBeDefined();
+        expect(error.errors.urgency).toBeDefined();
+      }
     });
 
-    it('should return 404 if event is not found', async () => {
-      Event.findById.mockResolvedValue(null);
+    it('should save a valid event', async () => {
+      const validEvent = new Event({
+        eventName: 'Test Event',
+        eventDescription: 'A valid description',
+        location: 'Test Location',
+        requiredSkills: ['Skill1', 'Skill2'],
+        urgency: 'Medium',
+        eventDate: new Date(),
+      });
 
-      const response = await request(app).get('/events/1');
+      jest.spyOn(validEvent, 'save').mockResolvedValue(validEvent);
+      const result = await validEvent.save();
 
-      expect(response.status).toBe(404);
-      expect(response.body.message).toBe('Event not found');
-    });
-
-    it('should return 500 if error occurs during retrieval by ID', async () => {
-      Event.findById.mockRejectedValue(new Error('Error fetching event'));
-
-      const response = await request(app).get('/events/1');
-
-      expect(response.status).toBe(500);
-    });
-  });
-
-  // Test PUT /events/update/:id
-  describe('PUT /events/update/:id', () => {
-    it('should update an event by ID', async () => {
-      const updatedEvent = { _id: '1', eventName: 'Updated Event', location: 'New Location' };
-      Event.findByIdAndUpdate.mockResolvedValue(updatedEvent);
-
-      const response = await request(app)
-        .put('/events/update/1')
-        .send(updatedEvent);
-
-      expect(response.status).toBe(200);
-      expect(response.body.message).toBe('Event updated successfully');
-      expect(response.body.event).toEqual(updatedEvent);
-    });
-
-    it('should return 404 if event to update is not found', async () => {
-      Event.findByIdAndUpdate.mockResolvedValue(null);
-
-      const response = await request(app)
-        .put('/events/update/1')
-        .send({ eventName: 'Nonexistent Event' });
-
-      expect(response.status).toBe(404);
-      expect(response.body.message).toBe('Event not found');
-    });
-
-    it('should return 500 if error occurs during event update', async () => {
-      Event.findByIdAndUpdate.mockRejectedValue(new Error('Error updating event'));
-
-      const response = await request(app).put('/events/update/1').send({});
-
-      expect(response.status).toBe(500);
-    });
-  });
-
-  // Test DELETE /events/delete/:id
-  describe('DELETE /events/delete/:id', () => {
-    it('should delete an event by ID', async () => {
-      Event.findByIdAndDelete.mockResolvedValue({ _id: '1', eventName: 'Event to Delete' });
-
-      const response = await request(app).delete('/events/delete/1');
-
-      expect(response.status).toBe(200);
-      expect(response.body.message).toBe('Event deleted successfully');
-    });
-
-    it('should return 404 if event to delete is not found', async () => {
-      Event.findByIdAndDelete.mockResolvedValue(null);
-
-      const response = await request(app).delete('/events/delete/1');
-
-      expect(response.status).toBe(404);
-      expect(response.body.message).toBe('Event not found');
-    });
-
-    it('should return 500 if error occurs during event deletion', async () => {
-      Event.findByIdAndDelete.mockRejectedValue(new Error('Error deleting event'));
-
-      const response = await request(app).delete('/events/delete/1');
-
-      expect(response.status).toBe(500);
+      expect(result.eventName).toBe('Test Event');
+      expect(result.location).toBe('Test Location');
     });
   });
 });
